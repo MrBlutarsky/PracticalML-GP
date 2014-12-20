@@ -1,6 +1,8 @@
 Practical ML
 =========================
 
+
+
 #### Overview
 
 This document decribes how I operate to build my prediction model for the prediction assignment. I describe each logical step in a dedicated section.  
@@ -12,12 +14,13 @@ I first cleaned both training and test set from the following:
  - Columns with NA and empty values (no data is useless information)
  - Rows with "new window" equal to 1 (sort of "summary" of previous time window)
  - All time stamp information (no need to analyze time evolution in this problem in my opinion and anyway I don't know how to do it)
+ - Column X
 
 The reason for cleaning the data is just to have it loaded and handled a bit faster in my R scripts.
 
 #### Step 2: Set the seed, have a look at the data
 
-I created a training and a test set from the training data file. My goal at this stage was to produce some plots and get some insights about the structure of the data.
+I created a training and a test set from the training data file. My goal at this stage was to produce some plots and get insights about the structure of the data.
 
 I created the train and test set with the usual code:
 
@@ -30,14 +33,16 @@ training <- userData[inTrain,]
 testing <- userData[-inTrain,]
 ```
 
-My first idea was to produce feature plots, hoping to spot features separating well the different classes. However I gave it up quite soon: I tried some variables combinations but it always resulted in one class point covering up all the figure, with not much separation. 
+My first idea was to produce feature plots, hoping to spot features well separating the different classes. However I gave it up quite soon: I tried some variables combinations but it always resulted in one class point covering up all the figure, with not much separation. 
 
 Therefore, I took another approach and decided to:
 
 1. Plot each feature vs class in a separate plot (boxplot + jitter)
 2. Further filter the data by person ("user_name")
 
-The reason of choice 1 being to overcome the problem I had with the feature plots. The reason for point 2 is that I made the hypothesis that the same exercise class performed by persons with different physical attributes would result in different measurement ranges for the same feature. 
+The reason of choice 1 being to overcome the readability problem I had with the feature plots. The reason for point 2 is that I made the hypothesis that the same exercise class performed by persons with different physical attributes would result in different measurement ranges for a given feature. 
+
+Example plots are:
 
 ```{r echo=FALSE, include=FALSE}
 library(caret)
@@ -70,11 +75,11 @@ plot(p2)
 
 Comparing the data in the two plots, indeed the scale is different. Given this fact, I decided to train 6 different predictors, one for each person, rather than having the algorithm figuring out for itself that the person name was the first variable to use to make the decision. 
 
-This choice I made is motivated by the fact that the test data we want to predict in the assignement is collected with the same users. If the goal was to have a more general predictor (i.e. predicting also unseen users data) of course this would not be a valid approach.
+This choice I made is motivated by the fact that the test data we want to predict in the assignement is collected with the very same users. If the goal was to have a more general predictor (i.e. predicting also unseen users data) or do predictions with a much larger number of users this would not be a valid approach.
 
 #### Step 3: Model selection and training - first attempt
 
-NOTE: in the following I describe what I did to train the model for the user "Adelmo". Thus the numerical results reported refer to the subset of data for Adlemo. For the other users I proceeded anlogously with the corresponding user data.
+NOTE: in the following I describe what I did to train the model for the user "Adelmo". Thus the numerical results reported here refer to the subset of data for Adlemo. For the other users I proceeded anlogously with the corresponding user data.
 
 To train each of the models, I decided to use 5-fold cross validation. Training parameter control can be achieved in caret with the ``` trainControl ``` function. In my case I only set the number of folds I wanted to have (5) and left the remaining parameters to their default:
 
@@ -84,19 +89,58 @@ trParam <- trainControl(method="cv",number=5,verboseIter=FALSE)
 
 The object trParam can then be passed to the ```train``` function to set the training parameters. As for the model type, I tried random forests (```method="rf"``` for the ```train``` function) and Gradient Boosting Machine (```method="gbm"``` for the ```train``` function). I got pretty decent results in both cases, but I selected gbm for my final predictors (no specific reason).
 
-As a first test, I trained a model using all the available features (remember I filtered out "useless" variables first) and had a look at the results (confusionMatrix) for the training data prediction.
+As a first test, I trained the model using all the available features (remember I filtered out "useless" variables first) and had a look at the results (confusionMatrix) for the training data prediction.
 
-TODO: model train here with all features
+```{r echo=FALSE, include=FALSE}
+
+library(caret)
+
+trainingDataFile = "adelmo_data.csv"
+SEED = 12345
+
+dataIn = read.csv(trainingDataFile)
+
+set.seed(SEED)
+inTrain <- createDataPartition(y=dataIn$classe, p=0.75, list=FALSE)
+
+training <- dataIn[inTrain,]
+testing <- dataIn[-inTrain,]
+
+features = c("roll_belt","pitch_belt","yaw_belt","total_accel_belt","gyros_belt_x","gyros_belt_y","gyros_belt_z","accel_belt_x","accel_belt_y","accel_belt_z","magnet_belt_x","magnet_belt_y","magnet_belt_z","roll_arm","pitch_arm","yaw_arm","total_accel_arm","gyros_arm_x","gyros_arm_y","gyros_arm_z","accel_arm_x","accel_arm_y","accel_arm_z","magnet_arm_x","magnet_arm_y","magnet_arm_z","roll_dumbbell","pitch_dumbbell","yaw_dumbbell","total_accel_dumbbell","gyros_dumbbell_x","gyros_dumbbell_y","gyros_dumbbell_z","accel_dumbbell_x","accel_dumbbell_y","accel_dumbbell_z","magnet_dumbbell_x","magnet_dumbbell_y","magnet_dumbbell_z","roll_forearm","pitch_forearm","yaw_forearm","total_accel_forearm","gyros_forearm_x","gyros_forearm_y","gyros_forearm_z","accel_forearm_x","accel_forearm_y","accel_forearm_z","magnet_forearm_x","magnet_forearm_y","magnet_forearm_z","classe")
+
+training = training[features] 
+ 
+trParam <- trainControl(method="cv",number=5,verboseIter=FALSE)
+
+```
+
+```{r message=FALSE}
+# Here "training" contains all the features and class for the training set of user Adelmo
+model <- train(classe ~ ., data=training,method="gbm",trControl=trParam,verbose=FALSE)
+
+predictionTrain = predict(model, training)
+
+confusionMatrix(predictionTrain, training$class)
+```
+
+With which I get a (scary) 100% accuracy on the training set. Training such a model took a minute and a half on my laptop. The test set prediction accuracy is:
+
+```{r message=FALSE}
+# Here "testing" contains all the features and class for the testing set of user Adelmo
+predictionTest = predict(model, testing)
+
+confusionMatrix(predictionTest, testing$class)
+```
 
 Since the prediction accuracy is excellent I could have gone this way (use all the features) to train the remaining models (other users). However: where's the fun then? I spent more time producing the plots than playing with the predictor. Thus I decided to try to each model using as few features as possible while getting decent results.
 
 #### Step 4: Final models training
 
-To select the features to use I iterated these steps:
+To select the features to use for each model I iterated these steps:
 
 1. Look at the boxplots, select a feature that show a "neat" separation of one or more classes for the rest
-2. Add that feature to the current features list (sometimes 1 feature alone is not enough to produce a model and train fails)
-3. Train the model using the features (as described in section 3)
+2. Add that feature to the current features list
+3. Train the model using the features (as described in section 3), use at least 2
 4. Check the prediction accuracy on the training set
 5. Repeat until satisfied (accuracy 95% confidence interval > 0.97)
 6. Final validation with testing data
@@ -157,7 +201,9 @@ predictionTrain = predict(model, training)
 confusionMatrix(predictionTrain, training$class)
 ```
 
-Which is not bad (and takes less than 10 seconds to train). Given these results I would now search (looking at the plots) for a feature better separating A-B-C, since most misclassification errors happen there. NOTE: I know looking this way at the boxplots is not really a guarantee: I could choose a feature that separates classes for points that are already well classified, but well, it's almost Christmas, I work, and I do not have much time to spend fighting with R to figure out how to analyze and plot more complex interactions.
+Which is not bad (and takes less than 10 seconds to train). Given these results I would now search (looking at the boxplots) for a feature better separating A-B-C, since most misclassification errors happen there. 
+
+NOTE: I know that looking this way at the boxplots is not really a guarantee. I could choose a feature that separates classes for points that are already well classified, but well, it's almost Christmas, I work, and I do not have much time to spend fighting with R to figure out how to analyze and plot more complex interactions.
 
 My final model for the user Adelmo uses the following features:
 
@@ -202,9 +248,11 @@ predictionTest = predict(model, testing)
 confusionMatrix(predictionTest, testing$class)
 ```
 
+I also tried to use the features for Adelmo classifier to train classifier for other users generally obtaing poor results. 
+
 #### Other models
 
-For the sake of completeness, I report here the features that I used for the remaining models.
+For the sake of completeness, I report here the features that I used for the remaining models. 
 
 Carlitos:
 
