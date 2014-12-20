@@ -5,7 +5,7 @@ Practical ML
 
 #### Overview
 
-This document decribes how I operate to build my prediction model for the prediction assignment. I describe each logical step in a dedicated section.  
+This document decribes how I operated to build my prediction model for the prediction assignment. I describe each logical step in a dedicated section.  
 
 #### Step 1: Data filtering
 
@@ -33,14 +33,14 @@ training <- userData[inTrain,]
 testing <- userData[-inTrain,]
 ```
 
-My first idea was to produce feature plots, hoping to spot features well separating the different classes. However I gave it up quite soon: I tried some variables combinations but it always resulted in one class point covering up all the figure, with not much separation. 
+My first idea was to produce feature plots, hoping to spot features separating the different classes. However I gave it up quite soon: I tried some variables combinations but it always resulted in one class point covering up all the figure, with no clear separation. 
 
 Therefore, I took another approach and decided to:
 
 1. Plot each feature vs class in a separate plot (boxplot + jitter)
 2. Further filter the data by person ("user_name")
 
-The reason of choice 1 being to overcome the readability problem I had with the feature plots. The reason for point 2 is that I made the hypothesis that the same exercise class performed by persons with different physical attributes would result in different measurement ranges for a given feature. 
+The reason of choice 1 being to overcome the readability problem I had with the feature plots. As for choice 2 I made the hypothesis that the same exercise class performed by persons with different physical attributes would result in different measurement ranges for a given feature. 
 
 Example plots are:
 
@@ -123,7 +123,7 @@ predictionTrain = predict(model, training)
 confusionMatrix(predictionTrain, training$class)
 ```
 
-With which I get a (scary) 100% accuracy on the training set. Training such a model took a minute and a half on my laptop. The test set prediction accuracy is:
+With which I get a (scary) 100% accuracy on the training set. Training such a model took roughly a minute and a half on my laptop. The test set prediction accuracy is:
 
 ```{r message=FALSE}
 # Here "testing" contains all the features and class for the testing set of user Adelmo
@@ -132,15 +132,15 @@ predictionTest = predict(model, testing)
 confusionMatrix(predictionTest, testing$class)
 ```
 
-Since the prediction accuracy is excellent I could have gone this way (use all the features) to train the remaining models (other users). However: where's the fun then? I spent more time producing the plots than playing with the predictor. Thus I decided to try to each model using as few features as possible while getting decent results.
+Since the prediction accuracy is excellent I could have gone this way (use all the features) to train the remaining models (other users). However: where's the fun then? I spent more time producing the plots than playing with the predictor. Thus I decided to try producing each model using as few features as possible while getting decent results.
 
 #### Step 4: Final models training
 
 To select the features to use for each model I iterated these steps:
 
-1. Look at the boxplots, select a feature that show a "neat" separation of one or more classes for the rest
+1. Look at the boxplots, select a feature that show a "neat" separation of one or more classes from the rest
 2. Add that feature to the current features list
-3. Train the model using the features (as described in section 3), use at least 2
+3. Train the model using the features (as described in section 3) - use at least 2
 4. Check the prediction accuracy on the training set
 5. Repeat until satisfied (accuracy 95% confidence interval > 0.97)
 6. Final validation with testing data
@@ -165,7 +165,7 @@ p1 = qplot(trainingAdelmo$classe, trainingAdelmo$pitch_belt, fill=trainingAdelmo
 plot(p1)
 ```
 
-It is "interesting" because it already isolates class E and partly distinguishing between C or D vs A or B. 
+It is "interesting" because it already isolates class E and partly distinguishes between C or D vs A or B (imagine a threshold of -42.5 separating the 2 pairs of classes for many data points). 
 
 For the user Adelmo, a model based on "pitch_belt" and "roll_belt" results in (training not shown, see Section 3):
 
