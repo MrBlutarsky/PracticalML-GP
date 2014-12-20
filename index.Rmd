@@ -1,0 +1,260 @@
+Practical ML
+=========================
+
+#### Overview
+
+This document decribes how I operate to build my prediction model for the prediction assignment. I describe each logical step in a dedicated section.  
+
+#### Step 1: Data filtering
+
+I first cleaned both training and test set from the following:
+
+ - Columns with NA and empty values (no data is useless information)
+ - Rows with "new window" equal to 1 (sort of "summary" of previous time window)
+ - All time stamp information (no need to analyze time evolution in this problem in my opinion and anyway I don't know how to do it)
+
+The reason for cleaning the data is just to have it loaded and handled a bit faster in my R scripts.
+
+#### Step 2: Set the seed, have a look at the data
+
+I created a training and a test set from the training data file. My goal at this stage was to produce some plots and get some insights about the structure of the data.
+
+I created the train and test set with the usual code:
+
+```
+# Seed -> always the same sampling in my script
+set.seed(12345)
+# p = 0.75, I simply chose the course "default"
+inTrain  <- createDataPartition(y=filteredTrainingData$classe, p=0.75, list=FALSE)
+training <- userData[inTrain,]
+testing <- userData[-inTrain,]
+```
+
+My first idea was to produce feature plots, hoping to spot features separating well the different classes. However I gave it up quite soon: I tried some variables combinations but it always resulted in one class point covering up all the figure, with not much separation. 
+
+Therefore, I took another approach and decided to:
+
+1. Plot each feature vs class in a separate plot (boxplot + jitter)
+2. Further filter the data by person ("user_name")
+
+The reason of choice 1 being to overcome the problem I had with the feature plots. The reason for point 2 is that I made the hypothesis that the same exercise class performed by persons with different physical attributes would result in different measurement ranges for the same feature. 
+
+```{r echo=FALSE, include=FALSE}
+library(caret)
+
+carlitosFile = "carlitos_data.csv"
+adelmoFile = "adelmo_data.csv"
+
+SEED = 12345
+
+set.seed(SEED)
+carlitosData = read.csv(carlitosFile)
+inTrain <- createDataPartition(y=carlitosData$classe, p=0.75, list=FALSE)
+trainingCarlitos <- carlitosData[inTrain,]
+
+set.seed(SEED)
+adelmoData = read.csv(adelmoFile)
+inTrain <- createDataPartition(y=adelmoData$classe, p=0.75, list=FALSE)
+trainingAdelmo <- adelmoData[inTrain,]
+```
+
+```{r}
+# trainingCarlitos and trainingAdelmo contain the filtered data for the users Carlitos and Adelmo.
+p1 = qplot(trainingCarlitos$classe, trainingCarlitos$pitch_belt, fill=trainingCarlitos$classe, geom=c("boxplot","jitter"), ylab="Pitch belt", xlab="Classe")
+
+p2 = qplot(trainingAdelmo$classe, trainingAdelmo$pitch_belt, fill=trainingAdelmo$classe, geom=c("boxplot","jitter"), ylab="Pitch belt", xlab="Classe")
+
+plot(p1)
+plot(p2)
+```
+
+Comparing the data in the two plots, indeed the scale is different. Given this fact, I decided to train 6 different predictors, one for each person, rather than having the algorithm figuring out for itself that the person name was the first variable to use to make the decision. 
+
+This choice I made is motivated by the fact that the test data we want to predict in the assignement is collected with the same users. If the goal was to have a more general predictor (i.e. predicting also unseen users data) of course this would not be a valid approach.
+
+#### Step 3: Model selection and training - first attempt
+
+NOTE: in the following I describe what I did to train the model for the user "Adelmo". Thus the numerical results reported refer to the subset of data for Adlemo. For the other users I proceeded anlogously with the corresponding user data.
+
+To train each of the models, I decided to use 5-fold cross validation. Training parameter control can be achieved in caret with the ``` trainControl ``` function. In my case I only set the number of folds I wanted to have (5) and left the remaining parameters to their default:
+
+```
+trParam <- trainControl(method="cv",number=5,verboseIter=FALSE)
+```
+
+The object trParam can then be passed to the ```train``` function to set the training parameters. As for the model type, I tried random forests (```method="rf"``` for the ```train``` function) and Gradient Boosting Machine (```method="gbm"``` for the ```train``` function). I got pretty decent results in both cases, but I selected gbm for my final predictors (no specific reason).
+
+As a first test, I trained a model using all the available features (remember I filtered out "useless" variables first) and had a look at the results (confusionMatrix) for the training data prediction.
+
+TODO: model train here with all features
+
+Since the prediction accuracy is excellent I could have gone this way (use all the features) to train the remaining models (other users). However: where's the fun then? I spent more time producing the plots than playing with the predictor. Thus I decided to try to each model using as few features as possible while getting decent results.
+
+#### Step 4: Final models training
+
+To select the features to use I iterated these steps:
+
+1. Look at the boxplots, select a feature that show a "neat" separation of one or more classes for the rest
+2. Add that feature to the current features list (sometimes 1 feature alone is not enough to produce a model and train fails)
+3. Train the model using the features (as described in section 3)
+4. Check the prediction accuracy on the training set
+5. Repeat until satisfied (accuracy 95% confidence interval > 0.97)
+6. Final validation with testing data
+
+So for example for point 1 in my iterative procedure "pitch_belt" looks an interesting feature (again "Adelmo" results shown):
+
+```{r echo=FALSE, include=FALSE}
+library(caret)
+
+adelmoFile = "adelmo_data.csv"
+
+SEED = 12345
+
+set.seed(SEED)
+adelmoData = read.csv(adelmoFile)
+inTrain <- createDataPartition(y=adelmoData$classe, p=0.75, list=FALSE)
+trainingAdelmo <- adelmoData[inTrain,]
+```
+
+```{r  echo=FALSE, warning=FALSE}
+p1 = qplot(trainingAdelmo$classe, trainingAdelmo$pitch_belt, fill=trainingAdelmo$classe, geom=c("boxplot","jitter"), ylab="Pitch belt", xlab="Classe")
+plot(p1)
+```
+
+It is "interesting" because it already isolates class E and partly distinguishing between C or D vs A or B. 
+
+For the user Adelmo, a model based on "pitch_belt" and "roll_belt" results in (training not shown, see Section 3):
+
+```{r echo=FALSE, include=FALSE}
+
+library(caret)
+
+trainingDataFile = "adelmo_data.csv"
+SEED = 12345
+
+dataIn = read.csv(trainingDataFile)
+
+set.seed(SEED)
+inTrain <- createDataPartition(y=dataIn$classe, p=0.75, list=FALSE)
+
+training <- dataIn[inTrain,]
+testing <- dataIn[-inTrain,]
+
+features = c("roll_belt","pitch_belt","classe")
+
+training = training[features] 
+ 
+trParam <- trainControl(method="cv",number=5,verboseIter=FALSE)
+
+```
+
+```{r results="hide", warning=FALSE, message=FALSE}
+model <- train(classe ~ ., data=training,method="gbm",trControl=trParam,verbose=FALSE)
+
+predictionTrain = predict(model, training)
+
+```{r warning=FALSE}
+confusionMatrix(predictionTrain, training$class)
+```
+
+Which is not bad (and takes less than 10 seconds to train). Given these results I would now search (looking at the plots) for a feature better separating A-B-C, since most misclassification errors happen there. NOTE: I know looking this way at the boxplots is not really a guarantee: I could choose a feature that separates classes for points that are already well classified, but well, it's almost Christmas, I work, and I do not have much time to spend fighting with R to figure out how to analyze and plot more complex interactions.
+
+My final model for the user Adelmo uses the following features:
+
+- pitch_belt
+- roll_belt
+- total_accel_belt 
+- magnet_belt_x
+- magnet_belt_z
+- yaw_belt
+
+The prediction on Adelmo test set using my final model: 
+
+```{r echo=FALSE, include=FALSE}
+
+library(caret)
+
+trainingDataFile = "adelmo_data.csv"
+SEED = 12345
+
+dataIn = read.csv(trainingDataFile)
+
+set.seed(SEED)
+inTrain <- createDataPartition(y=dataIn$classe, p=0.75, list=FALSE)
+
+training <- dataIn[inTrain,]
+testing <- dataIn[-inTrain,]
+
+features = c ("pitch_belt","roll_belt","total_accel_belt","magnet_belt_x","magnet_belt_z","yaw_belt","classe")
+
+training = training[features] 
+ 
+trParam <- trainControl(method="cv",number=5,verboseIter=FALSE)
+
+model <- train(classe ~ ., data=training,method="gbm",trControl=trParam,verbose=FALSE)
+
+```
+
+```{r warning=FALSE}
+
+predictionTest = predict(model, testing)
+
+confusionMatrix(predictionTest, testing$class)
+```
+
+#### Other models
+
+For the sake of completeness, I report here the features that I used for the remaining models.
+
+Carlitos:
+
+- roll_belt
+- roll_forearm
+- pitch_forearm
+- pitch_dumbbell
+- accel_dumbbell_z
+- magnet_belt_y
+- pitch_arm
+
+Charles:
+
+- roll_belt
+- roll_forearm
+- yaw_dumbbell
+- accel_dumbbell_z 
+- magnet_dumbbell_z
+
+Eurico:
+
+- roll_belt
+- magnet_arm_z
+- magnet_dumbbell_x
+- magnet_forearm_z
+- pitch_dumbbell 
+- pitch_forearm
+
+Jeremy:
+
+ - roll_belt
+ - roll_forearm
+ - yaw_forearm
+ - magnet_dumbbell_x 
+ - magnet_dumbbell_y
+ - magnet_dumbbell_z 
+ - magnet_belt_x 
+ - magnet_belt_z
+ 
+Pedro:
+
+ - roll_belt
+ - pitch_belt
+ - pitch_forearm
+ - roll_forearm
+ - accel_forearm_y
+ - roll_arm
+ - magnet_arm_z
+
+
+#### Conclusion
+
+With my models I got a pretty decent accuracy (18/20) in the assignement cases. I could have probably done 20/20 using all the features each time, but it was not my goal. I simply wanted to play a bit with the package and try to keep the models as small as possible. I am totally satisfied with my result.
